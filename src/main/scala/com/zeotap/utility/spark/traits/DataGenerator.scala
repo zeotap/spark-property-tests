@@ -8,4 +8,3 @@ trait DataGenerator[A] {
 object DataGenerator{
   def apply[A](implicit instance:DataGenerator[A]): DataGenerator[A] = instance
 }
-

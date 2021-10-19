@@ -1,26 +1,29 @@
 package com.zeotap.utility.spark
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.zeotap.utility.spark.example.CommonColumnHelper._
-import com.zeotap.utility.spark.generator.RandomDataGenerator
+import com.zeotap.utility.spark.example.generator.RandomDataGenerator
+import com.zeotap.utility.spark.example.helper.ColumnConstants.JavaNull
+import com.zeotap.utility.spark.example.helper.UserDefinedColumns._
+import com.zeotap.utility.spark.example.types.CookieArrayColumn
+import com.zeotap.utility.spark.example.types.CookieArrayColumn.cookieArrayColumn
 import com.zeotap.utility.spark.ops.DataColumnOps._
 import com.zeotap.utility.spark.ops.SparkDataframeOps.SparkOps
 import com.zeotap.utility.spark.traits._
 import com.zeotap.utility.spark.types.ArrayColumn.arrayColumn
 import com.zeotap.utility.spark.types.DataColumn._
-import com.zeotap.utility.spark.types.{ArrayColumn, DataColumn, SparkDataframe}
+import com.zeotap.utility.spark.types.MapColumn.mapColumn
+import com.zeotap.utility.spark.types._
 import org.apache.spark.sql.functions.{col, max, min}
-import org.apache.spark.sql.{DataFrame, Encoders, Row}
+import org.apache.spark.sql.types.{DataType => _, _}
+import org.apache.spark.sql.{DataFrame, Encoders, Row, SparkSession}
 import org.scalacheck.Prop.forAll
 import org.scalatest.FunSuite
 import org.scalatest.prop.Checkers.check
 
-import scala.collection.mutable
-
 class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
 
   test("test primitive and array column generation - schema and data") {
-    val dataColumns = types.SparkDataframe(
+    val dataColumns = SparkDataframe(
       zuid(AlwaysSkewed),
       gender().withJunk,
       rawIAB().withNull.withJunk,
@@ -31,12 +34,14 @@ class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
       dataColumn("Common_ts", DLong, AlwaysSkewed, RandomDataGenerator.timestamp(15)),
       dataColumn("creditCardAvailable", DBoolean, AlwaysUniform, List("True", "False")),
       arrayColumn(dataColumn("Income_preprocess_array", DInteger, AlwaysSkewed, List("32000", "20000", "45000", "70000", null)), 10000),
-      arrayColumn(adid().withNull.withJunk)
+      arrayColumn(adid().withNull.withJunk),
+      mapColumn("adid_gender_map", adid(AlwaysPresent, RandomDataGenerator.UUID(5000)), bundleid(AlwaysSkewed), 1000),
+      mapColumn("adid_to_age_mapping", adid().values, age().values, DString, DInteger),
+      cookieArrayColumn()
     )
-    implicit val sc = spark
-    val prop = forAll(dataColumns.getArbitraryGenerator()) {
-      df =>
-        !testValues(dataColumns, df).exists(_ != true) && !testSchema(dataColumns, df).exists(_ != true)
+    implicit val sc: SparkSession = spark
+    val prop = forAll(dataColumns.getArbitraryGenerator()) { df =>
+      !testValues(dataColumns, df).exists(_ != true) && !testSchema(dataColumns, df).exists(_ != true)
     }
     check(prop)
   }
@@ -44,7 +49,31 @@ class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
   def testValues(sparkDataframe: SparkDataframe, df: DataFrame): List[Boolean] = sparkDataframe.dataColumns.map {
     case d: DataColumn => testDataColumnValues(df, d)
     case a: ArrayColumn => testArrayColumnValues(df, a)
+    case m: MapColumn => if (df.count() > 0) testNonPrimitiveColumnValues(df, m) else true
+    case ca: CookieArrayColumn => if (df.count() > 0) testNonPrimitiveColumnValues(df, ca) else true
   }.toList
+
+  /**
+   * Map Column and Cookie Array test
+   *  1. Populates key-value pair/cookie array column based on input DataColumns or List of String
+   *  2. Empty maps/cookie array column may be present but no Java Null as instance reference
+   *  3. AlwaysSkewed or AlwaysUniform - is not supported for MapColumn/Cookie Array type
+   * @param df DataFrame
+   * @param d  MapColumn  or CookieArrayColumn
+   * @return result as Boolean
+   */
+  // TODO : The AlwaysSkewed feature does not make a lot of sense now. Define Skew in Map and come up with a better implementation
+  def testNonPrimitiveColumnValues(df: DataFrame, d: DColumn): Boolean = df.map(row => {
+    val nonPrimitiveColumn = d match {
+      case m: MapColumn => row.getAs[Map[Any, Any]](m.name)
+      case c: CookieArrayColumn => row.getAs[Seq[Row]](c.getName)
+    }
+    if (nonPrimitiveColumn.isEmpty) {
+      nonPrimitiveColumn != JavaNull
+    } else {
+      nonPrimitiveColumn.nonEmpty
+    }
+  })(Encoders.scalaBoolean).reduce(_ && _)
 
   /**
    * Array Column test
@@ -53,7 +82,7 @@ class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
    *    a. In a dataframe array column, the ratio of the most frequent element to the least frequent element
    *       is greater than or equal to 1:3
    *    b. We observed both cases of only skewed array as well as only uniform array being present at times with no certainty
-   * // TODO : This feature does not make a lot of sense now. Define Skew in Array and come up with a better implementation
+   * // TODO : The AlwaysSkewed feature does not make a lot of sense now. Define Skew in Array and come up with a better implementation
    *
    * @param df DataFrame
    * @param a  ArrayColumn
@@ -64,43 +93,39 @@ class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
       true
     else {
       val resultDF = df.map(x => {
-        val wrappedArray = x.getAs[mutable.WrappedArray[Any]](a.dataColumn.name)
-        val countMap = wrappedArray.groupBy(identity).mapValues(_.size)
+        val arrayColumnValues = x.getAs[Seq[Any]](a.dataColumn.name)
+        val countMap = arrayColumnValues.groupBy(identity).mapValues(_.size)
 
-        val order = new Ordering[(Any, Int)] {
-          override def compare(x: (Any, Int), y: (Any, Int)): Int = if (x._2 > y._2) 1
-          else if (x._2 < y._2) -1
-          else 0
-        }
         if (countMap.isEmpty) {
           a.dataColumn.options match {
-            case AlwaysPresent => false.asInstanceOf[java.lang.Boolean]
-            case AlwaysUniform => false.asInstanceOf[java.lang.Boolean]
-            case AlwaysSkewed => true.asInstanceOf[java.lang.Boolean]
+            case AlwaysPresent => false
+            case AlwaysUniform => false
+            case AlwaysSkewed => true
           }
         } else {
-          val minTuple = countMap.min(order)
-          val maxTuple = countMap.max(order)
-          (maxTuple._2 >= minTuple._2 * 3).asInstanceOf[java.lang.Boolean]
+          val minTuple = countMap.minBy(_._2)
+          val maxTuple = countMap.maxBy(_._2)
+          maxTuple._2 >= minTuple._2 * 3
         }
-      })(Encoders.BOOLEAN)
-      resultDF.groupBy("value").count().show()
+      })(Encoders.scalaBoolean)
       val actualResultDF = resultDF.groupBy("value").count()
       a.dataColumn.options match {
-        case AlwaysSkewed => if (actualResultDF.count() == 1) {
-          true
-        } else {
-          actualResultDF.reduce((a, b) => {
-            val firstBool = a.getAs("value").asInstanceOf[Boolean]
-            val secondBool = b.getAs("value").asInstanceOf[Boolean]
-            val firstCount = a.getAs("count").asInstanceOf[Long]
-            val secondCount = b.getAs("count").asInstanceOf[Long]
+        case AlwaysSkewed => val rows = actualResultDF.collect()
+          if (rows.length == 1) {
+            true
+          } else {
+            assert(rows.length == 2)
+            val first = rows(0)
+            val second = rows(1)
+            val firstBool = first.getAs("value").asInstanceOf[Boolean]
+            val secondBool = second.getAs("value").asInstanceOf[Boolean]
+            val firstCount = first.getAs("count").asInstanceOf[Long]
+            val secondCount = second.getAs("count").asInstanceOf[Long]
             (firstBool, secondBool) match {
-              case (true, false) => Row(firstCount >= secondCount)
-              case (false, true) => Row(secondCount >= firstCount)
+              case (true, false) => firstCount >= secondCount
+              case (false, true) => secondCount >= firstCount
             }
-          }).get(0).asInstanceOf[Boolean]
-        }
+          }
         case _ => true
       }
     }
@@ -136,25 +161,30 @@ class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
     }
   }
 
-  def arraySchemaCheck(a: ArrayColumn, dataframeNestedSchemaTypeAsString: String): Boolean = extractComplexType(dataframeNestedSchemaTypeAsString).equals("ArrayType") &&
-    primitiveSchemaCheck(a.dataColumn.dataType, extractInnerPrimitiveType(dataframeNestedSchemaTypeAsString))
+  def testSchema(sparkDataframe: SparkDataframe, df: DataFrame) = {
+    val sparkDataTypes = df.schema.fields.map(f => f.dataType)
+    (sparkDataframe.dataColumns zip sparkDataTypes).map {
+      case (a: ArrayColumn, b: ArrayType) => primitiveSchemaCheck(a.dataColumn.dataType, b.elementType)
+      case (d: DataColumn, b) => primitiveSchemaCheck(d.dataType, b)
+      case (m: MapColumn, b: MapType) => primitiveSchemaCheck(m.key.dataType, b.keyType) && primitiveSchemaCheck(m.value.dataType, b.valueType)
+      case (c: CookieArrayColumn, b: ArrayType) => cookieArraySchemaCheck(b, c)
+    }
+  }.toList
 
+  def cookieArraySchemaCheck(sparkDataType: ArrayType, dType: CookieArrayColumn) = sparkDataType.elementType.isInstanceOf[StructType] && {
+    val structType = sparkDataType.elementType.asInstanceOf[StructType]
+    structType.size == 2 &&
+      structType.fields(0).name.equalsIgnoreCase("id_type") &&
+      structType.fields(1).name.equalsIgnoreCase("id_value") &&
+      primitiveSchemaCheck(dType.idType.dataType, structType.fields(0).dataType) &&
+      primitiveSchemaCheck(dType.idValue.dataType, structType.fields(1).dataType)
+  }
 
-  def extractComplexType(ct: String) = ct.split("\\(")(0)
-
-  def extractInnerPrimitiveType(ct: String) = ct.split("\\(")(1).split(",")(0)
-
-  def testSchema(dataColumns: SparkDataframe, df: DataFrame): List[Boolean] =
-    (dataColumns.dataColumns zip df.dtypes).map {
-      case (d: DataColumn, s: (String, String)) => primitiveSchemaCheck(d.dataType, s._2)
-      case (a: ArrayColumn, s: (String, String)) => arraySchemaCheck(a, s._2)
-    }.toList
-
-  def primitiveSchemaCheck(dataColumnDType: DataType, dataFrameSchemaDType: String) = dataColumnDType match {
-    case DString => dataFrameSchemaDType.equals("StringType")
-    case DBoolean => dataFrameSchemaDType.equals("BooleanType")
-    case DDouble => dataFrameSchemaDType.equals("DoubleType")
-    case DLong => dataFrameSchemaDType.equals("LongType")
-    case DInteger => dataFrameSchemaDType.equals("IntegerType")
+  def primitiveSchemaCheck(dataColumnDType: com.zeotap.utility.spark.traits.DataType, sparkDataType: org.apache.spark.sql.types.DataType) = dataColumnDType match {
+    case DString => sparkDataType == StringType
+    case DBoolean => sparkDataType == BooleanType
+    case DDouble => sparkDataType == DoubleType
+    case DLong => sparkDataType == LongType
+    case DInteger => sparkDataType == IntegerType
   }
 }

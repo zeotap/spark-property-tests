@@ -1,4 +1,4 @@
-package com.zeotap.utility.spark.generator
+package com.zeotap.utility.spark.example.generator
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,4 +59,7 @@ object RandomDataGenerator {
     val values = List("CAN", "USA", "MEX", "ITA", "FRA", "BGD", "DEU", "FIN", "POL", "COL", "CHL")
     text(count, values)
   }
+
+  def idType(count: Int): List[String] = text(count, List("id_mid_1", "id_mid_12", "id_mid_13", "id_mid_4",
+    "id_mid_5", "id_mid_6", "id_mid_7", "id_mid_8", "id_mid_9", "id_mid_10", "id_mid_11"))
 }

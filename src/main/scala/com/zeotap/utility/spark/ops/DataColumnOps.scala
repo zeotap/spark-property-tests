@@ -2,6 +2,8 @@ package com.zeotap.utility.spark.ops
 
 import com.zeotap.utility.spark.traits._
 import com.zeotap.utility.spark.types._
+import org.apache.spark.sql.types
+import org.apache.spark.sql.types._
 
 
 object DataColumnOps {
@@ -35,6 +37,14 @@ object DataColumnOps {
       case DLong => dc.copy(values = List(Long.MaxValue, Long.MinValue).map(x => x.toString) ::: dc.values)
       case DDouble => dc.copy(values = List(Double.MaxValue, Double.MinValue).map(x => x.toString) ::: dc.values)
       case DBoolean => dc
+    }
+
+    def getSparkCompatiblePrimitiveTypes: types.DataType = dc.dataType match {
+      case DString => StringType
+      case DInteger => IntegerType
+      case DLong => LongType
+      case DDouble => DoubleType
+      case DBoolean => BooleanType
     }
   }
 

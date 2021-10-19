@@ -1,19 +1,16 @@
 package com.zeotap.utility.spark.types
 
-import com.zeotap.utility.spark.ops.DataColumnOps.{getBoolean, getDouble, getInteger, getLong}
+
+import com.zeotap.utility.spark.ops.DataColumnOps.{DataColumnUtils, getBoolean, getDouble, getInteger, getLong}
 import com.zeotap.utility.spark.ops.DataGenerationOps
 import com.zeotap.utility.spark.traits._
 import org.apache.spark.sql.types.{DataType => _, _}
 import org.scalacheck.Gen
 
 case class DataColumn(name: String, dataType: DataType, options: DataOption, values: List[String]) extends DColumn {
-  override def generateSchema: StructField = dataType match {
-    case DString => StructField(name, StringType, true)
-    case DBoolean => StructField(name, BooleanType, true)
-    case DDouble => StructField(name, DoubleType, true)
-    case DLong => StructField(name, LongType, true)
-    case DInteger => StructField(name, IntegerType, true)
-  }
+  override def generateSchema: StructField = StructField(name, this.getSparkCompatiblePrimitiveTypes, true)
+
+  override def getName: String = name
 
   override def dataGenerator[A]: Gen[A] = {
     import DataGenerationOps._
@@ -30,4 +27,14 @@ case class DataColumn(name: String, dataType: DataType, options: DataOption, val
 object DataColumn {
   def dataColumn(name: String, datatype: DataType, options: DataOption, values: List[String]) =
     DataColumn(name, datatype, options, values)
+
+  def stringColumn(name: String, values: List[String]) = DataColumn(name, DString, AlwaysPresent, values)
+
+  def intColumn(name: String, values: List[String]) = DataColumn(name, DInteger, AlwaysPresent, values)
+
+  def boolColumn(name: String, values: List[String]) = DataColumn(name, DBoolean, AlwaysPresent, values)
+
+  def doubleColumn(name: String, values: List[String]) = DataColumn(name, DDouble, AlwaysPresent, values)
+
+  def longColumn(name: String, values: List[String]) = DataColumn(name, DLong, AlwaysPresent, values)
 }
