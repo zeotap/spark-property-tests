@@ -1,4 +1,7 @@
 # spark-property-tests
+
+[![Join the chat at https://gitter.im/zeotap/spark-property-tests](https://badges.gitter.im/zeotap/spark-property-tests.svg)](https://gitter.im/zeotap/spark-property-tests?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Write property based tests easily on spark dataframes
 
 ## Why
