@@ -24,7 +24,23 @@ We have made use of Typeclasses in Scala and Generators in [scalacheck](https://
 Additionally, we have provided examples of how you can leverage the library for your own organization under package `com.zeotap.utility.spark.example`
 
 ## Dependency Management
-We are activly working on [OSSRH-78645](https://issues.sonatype.org/browse/OSSRH-78645) and will publish the details here once the artifacts are available in Maven Central 
+List of available versions are available at [this Maven Repo Link](https://mvnrepository.com/artifact/com.zeotap/spark-property-tests)
+
+Choose from one of the versions available - generally we have chosen the spark version as the version for our repo
+
+sbt
+```
+"com.zeotap" %% "spark-property-tests" % "2.4.5" % "test"
+```
+maven
+```
+<dependency>
+    <groupId>com.zeotap</groupId>
+    <artifactId>spark-property-tests_2.11</artifactId>
+    <version>2.4.5</version>
+    <scope>test</scope>
+</dependency>
+```
 
 ## Build
 Project is build using `sbt`
