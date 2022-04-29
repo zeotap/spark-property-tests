@@ -4,20 +4,21 @@ organization := "com.zeotap"
 publishMavenStyle := true
 val sparkVersion = settingKey[String]("Spark Version")
 val sparkTestingBaseVersion = settingKey[String]("Spark Testing Base Version")
+val supportedScalaVersion = settingKey[String]("Scala Version")
 
 sparkVersion := System.getProperty("sparkVersion", "2.4.3")
 sparkTestingBaseVersion := System.getProperty("sparkTestingBaseVersion", "2.4.3_0.14.0")
+scalaVersion := System.getProperty("supportedScalaVersion", "2.12.14")
 
-scalaVersion := "2.11.12"
 version := sparkVersion.value
 
 libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % sparkTestingBaseVersion.value
 
-fork in Test := true
+Test / fork  := true
 
 javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M", "-XX:+CMSClassUnloadingEnabled")
 
-parallelExecution in Test := false
+Test / parallelExecution := false
 
 // publish configurations
 licenses := List("Apache 2" -> new URL("http://www.apache.org/licenses/LICENSE-2.0.txt"))
