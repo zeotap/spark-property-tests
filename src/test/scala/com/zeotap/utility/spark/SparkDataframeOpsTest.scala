@@ -17,10 +17,10 @@ import org.apache.spark.sql.functions.{col, max, min}
 import org.apache.spark.sql.types.{DataType => _, _}
 import org.apache.spark.sql.{DataFrame, Encoders, Row, SparkSession}
 import org.scalacheck.Prop.forAll
-import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers.check
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.Checkers.check
 
-class SparkDataframeOpsTest extends FunSuite with DataFrameSuiteBase {
+class SparkDataframeOpsTest extends AnyFunSuite with DataFrameSuiteBase {
 
   test("test primitive and array column generation - schema and data") {
     val dataColumns = SparkDataframe(

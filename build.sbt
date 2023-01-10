@@ -10,6 +10,10 @@ sparkVersion := System.getProperty("sparkVersion", "2.4.3")
 sparkTestingBaseVersion := System.getProperty("sparkTestingBaseVersion", "2.4.3_0.14.0")
 scalaVersion := System.getProperty("supportedScalaVersion", "2.12.14")
 
+ThisBuild / libraryDependencySchemes ++= Seq(
+  "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
+)
+
 version := sparkVersion.value
 
 libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % sparkTestingBaseVersion.value
